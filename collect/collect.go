@@ -2,6 +2,8 @@ package collect
 
 import (
 	"bufio"
+	"fmt"
+	extensions "github.com/funbinary/crawler/extentions"
 	"github.com/funbinary/crawler/proxy"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -55,7 +57,7 @@ func (b *BrowserFetch) Get(request *Request) ([]byte, error) {
 		transport.Proxy = b.Proxy
 		client.Transport = transport
 	}
-
+	fmt.Println("Get", request.Url)
 	req, err := http.NewRequest("GET", request.Url, nil)
 	if err != nil {
 		return nil, err
@@ -63,7 +65,7 @@ func (b *BrowserFetch) Get(request *Request) ([]byte, error) {
 	if len(request.Task.Cookie) > 0 {
 		req.Header.Set("Cookie", request.Task.Cookie)
 	}
-	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/111.0.0.0 Safari/537.36")
+	req.Header.Set("User-Agent", extensions.GenerateRandomUA())
 	//req.Header.Set("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_4) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/80.0.3987.149 Safari/537.36")
 
 	resp, err := client.Do(req)
@@ -71,7 +73,7 @@ func (b *BrowserFetch) Get(request *Request) ([]byte, error) {
 		return nil, err
 	}
 	time.Sleep(request.Task.WaitTime)
-
+	fmt.Println("Get", request.Url, "success")
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		return nil, errors.Errorf("Error status code:%v", resp.StatusCode)

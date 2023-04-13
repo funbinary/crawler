@@ -130,10 +130,11 @@ type Scheduler interface {
 }
 
 type Schedule struct {
-	requestCh chan *collect.Request //负责接收请求
-	workerCh  chan *collect.Request //负责分配任务给 worker
-	reqQueue  []*collect.Request
-	Logger    *zap.Logger
+	requestCh   chan *collect.Request //负责接收请求
+	workerCh    chan *collect.Request //负责分配任务给 worker
+	priReqQueue []*collect.Request
+	reqQueue    []*collect.Request
+	Logger      *zap.Logger
 }
 
 func NewSchedule() *Schedule {
@@ -146,26 +147,34 @@ func NewSchedule() *Schedule {
 }
 
 func (s *Schedule) Schedule() {
-
+	var req *collect.Request
+	var ch chan *collect.Request
 	go func() {
 		for {
-			var req *collect.Request
-			var ch chan *collect.Request
+			if req == nil && len(s.priReqQueue) > 0 {
+				req = s.priReqQueue[0]
+				s.priReqQueue = s.priReqQueue[1:]
+				ch = s.workerCh
+			}
 
 			//如果任务队列 reqQueue 大于 0，意味着有爬虫任务，这时我们获取队列中第一个任务，并将其剔除出队列。
-
-			if len(s.reqQueue) > 0 {
+			if req == nil && len(s.reqQueue) > 0 {
 				req = s.reqQueue[0]
 				s.reqQueue = s.reqQueue[1:]
 				ch = s.workerCh
 			}
 			select {
 			case r := <-s.requestCh:
-				// 接收来自外界的请求，并将请求存储到 reqQueue 队列中
-				s.reqQueue = append(s.reqQueue, r)
-
+				if r.Priority > 0 {
+					s.priReqQueue = append(s.priReqQueue, r)
+				} else {
+					// 接收来自外界的请求，并将请求存储到 reqQueue 队列中
+					s.reqQueue = append(s.reqQueue, r)
+				}
 			case ch <- req:
 				// ch <- req 会将任务发送到 workerCh 通道中，等待 worker 接收。
+				req = nil
+				ch = nil
 			}
 		}
 	}()

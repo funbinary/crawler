@@ -25,6 +25,7 @@ type Request struct {
 	Task      *Task
 	Url       string
 	Method    string
+	Priority  int
 	Depth     int
 	ParseFunc func([]byte, *Request) ParseResult // 解析从网站获取到的网站信息
 
