@@ -60,6 +60,9 @@ func (b *BrowserFetch) Get(request *Request) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+	if len(request.Task.Cookie) > 0 {
+		req.Header.Set("Cookie", request.Task.Cookie)
+	}
 	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/111.0.0.0 Safari/537.36")
 	//req.Header.Set("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_4) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/80.0.3987.149 Safari/537.36")
 
@@ -67,7 +70,7 @@ func (b *BrowserFetch) Get(request *Request) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	time.Sleep(request.WaitTime)
+	time.Sleep(request.Task.WaitTime)
 
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
