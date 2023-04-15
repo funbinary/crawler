@@ -10,6 +10,7 @@ import (
 
 // 任务实例
 type Task struct {
+	Name        string // 用户界面显示的名称（应保证唯一性）
 	Url         string // 访问的防战
 	Cookie      string
 	WaitTime    time.Duration
@@ -17,18 +18,23 @@ type Task struct {
 	MaxDepth    int
 	Visited     map[string]bool
 	VisitedLock sync.Mutex
-	RootReq     *Request
+	Rule        RuleTree
 	Fetcher     Fetcher
+}
+
+type Context struct {
+	Body []byte
+	Req  *Request
 }
 
 // 单个请求
 type Request struct {
-	Task      *Task
-	Url       string
-	Method    string
-	Priority  int
-	Depth     int
-	ParseFunc func([]byte, *Request) ParseResult // 解析从网站获取到的网站信息
+	Task     *Task
+	Url      string
+	Method   string
+	Priority int
+	Depth    int
+	RuleName string
 
 	unique string
 }

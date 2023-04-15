@@ -2,9 +2,29 @@ package engine
 
 import (
 	"github.com/funbinary/crawler/collect"
+	"github.com/funbinary/crawler/parse/doubangroup"
 	"go.uber.org/zap"
 	"sync"
 )
+
+func init() {
+	Store.Add(doubangroup.DoubangroupTask)
+}
+
+var Store = &CrawlerStore{
+	list: []*collect.Task{},
+	hash: map[string]*collect.Task{},
+}
+
+type CrawlerStore struct {
+	list []*collect.Task
+	hash map[string]*collect.Task
+}
+
+func (c *CrawlerStore) Add(task *collect.Task) {
+	c.hash[task.Name] = task
+	c.list = append(c.list, task)
+}
 
 type Crawler struct {
 	out         chan collect.ParseResult //负责处理爬取后的数据，完成下一步的存储操作。schedule 函数会创建调度程序，负责的是调度的核心逻辑。
@@ -41,9 +61,13 @@ func (e *Crawler) Schedule() {
 	// workerCh
 	var reqs []*collect.Request
 	for _, seed := range e.Seeds {
-		seed.RootReq.Task = seed
-		seed.RootReq.Url = seed.Url
-		reqs = append(reqs, seed.RootReq)
+		task := Store.hash[seed.Name]
+		task.Fetcher = seed.Fetcher
+		rootreqs := task.Rule.Root()
+		for _, req := range rootreqs {
+			req.Task = task
+		}
+		reqs = append(reqs, rootreqs...)
 	}
 	go e.scheduler.Schedule()
 	go e.scheduler.Push(reqs...)
@@ -53,43 +77,49 @@ func (e *Crawler) Schedule() {
 func (e *Crawler) CreateWork() {
 	for {
 		// 接收到调度器分配的任务；
-		r := e.scheduler.Pull()
-		if err := r.Check(); err != nil {
+		req := e.scheduler.Pull()
+		if err := req.Check(); err != nil {
 			e.Logger.Error("check failed", zap.Error(err))
 			continue
 		}
 		// 判断是否已经访问过
-		if !r.Task.Reload && e.HasVisited(r) {
+		if !req.Task.Reload && e.HasVisited(req) {
 			e.Logger.Debug("request has visited",
-				zap.String("url", r.Url),
+				zap.String("url", req.Url),
 			)
 			continue
 		}
-		e.StoreVisited(r)
+		e.StoreVisited(req)
 
 		// 访问服务器
-		body, err := r.Task.Fetcher.Get(r)
+		body, err := req.Task.Fetcher.Get(req)
 		if err != nil {
 			e.Logger.Error(
 				"can't fetch ",
 				zap.Error(err),
-				zap.String("url", r.Url),
+				zap.String("url", req.Url),
 			)
-			e.SetFailure(r)
+			e.SetFailure(req)
 			continue
 		}
 		if len(body) < 6000 {
 			e.Logger.Error(
 				"can't fetch",
 				zap.Int("length", len(body)),
-				zap.String("url", r.Url),
+				zap.String("url", req.Url),
 			)
-			e.SetFailure(r)
+			e.SetFailure(req)
 			continue
 		}
 
+		rule := req.Task.Rule.Trunk[req.RuleName]
+
+		result := rule.ParseFunc(&collect.Context{
+			Body: body,
+			Req:  req,
+		})
+
 		//解析服务器返回的数据
-		result := r.ParseFunc(body, r)
 		if len(result.Requesrts) > 0 {
 			go e.scheduler.Push(result.Requesrts...)
 		}
