@@ -355,8 +355,3 @@ func (s *Schedule) Pull() *collect.Request {
 	r := <-s.workerCh
 	return r
 }
-
-func (s *Schedule) Output() *collect.Request {
-	r := <-s.workerCh
-	return r
-}
