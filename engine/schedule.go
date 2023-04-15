@@ -10,6 +10,8 @@ type Crawler struct {
 	out         chan collect.ParseResult //负责处理爬取后的数据，完成下一步的存储操作。schedule 函数会创建调度程序，负责的是调度的核心逻辑。
 	Visited     map[string]bool          //存储请求访问信息
 	VisitedLock sync.Mutex
+	failures    map[string]*collect.Request // 失败请求id -> 失败请求
+	failureLock sync.Mutex
 	options
 }
 
@@ -20,6 +22,7 @@ func NewEngine(opts ...Option) *Crawler {
 	}
 	e := &Crawler{}
 	e.Visited = make(map[string]bool, 100)
+	e.failures = make(map[string]*collect.Request)
 	e.options = options
 	return e
 }
@@ -56,7 +59,7 @@ func (e *Crawler) CreateWork() {
 			continue
 		}
 		// 判断是否已经访问过
-		if e.HasVisited(r) {
+		if !r.Task.Reload && e.HasVisited(r) {
 			e.Logger.Debug("request has visited",
 				zap.String("url", r.Url),
 			)
@@ -66,22 +69,25 @@ func (e *Crawler) CreateWork() {
 
 		// 访问服务器
 		body, err := r.Task.Fetcher.Get(r)
-		if len(body) < 6000 {
-			e.Logger.Error(
-				"can't fetch",
-				zap.Int("length", len(body)),
-				zap.String("url", r.Url),
-			)
-			continue
-		}
 		if err != nil {
 			e.Logger.Error(
 				"can't fetch ",
 				zap.Error(err),
 				zap.String("url", r.Url),
 			)
+			e.SetFailure(r)
 			continue
 		}
+		if len(body) < 6000 {
+			e.Logger.Error(
+				"can't fetch",
+				zap.Int("length", len(body)),
+				zap.String("url", r.Url),
+			)
+			e.SetFailure(r)
+			continue
+		}
+
 		//解析服务器返回的数据
 		result := r.ParseFunc(body, r)
 		if len(result.Requesrts) > 0 {
@@ -104,6 +110,23 @@ func (e *Crawler) HandleResult() {
 			}
 		}
 	}
+}
+
+func (e *Crawler) SetFailure(req *collect.Request) {
+	if !req.Task.Reload {
+		e.VisitedLock.Lock()
+		unique := req.Unique()
+		delete(e.Visited, unique)
+		e.VisitedLock.Unlock()
+	}
+	e.failureLock.Lock()
+	defer e.failureLock.Unlock()
+	if _, ok := e.failures[req.Unique()]; !ok {
+		// 首次失败时，再重新执行一次
+		e.failures[req.Unique()] = req
+		e.scheduler.Push(req)
+	}
+	// todo: 失败2次，加载到失败队列中
 }
 
 func (e *Crawler) HasVisited(r *collect.Request) bool {
