@@ -3,6 +3,7 @@ package collect
 import (
 	"crypto/md5"
 	"encoding/hex"
+	"github.com/funbinary/crawler/collector"
 	"github.com/funbinary/go_example/pkg/errors"
 	"regexp"
 	"sync"
@@ -27,11 +28,26 @@ type Task struct {
 	VisitedLock sync.Mutex
 	Rule        RuleTree
 	Fetcher     Fetcher
+	Store       collector.Store
 }
 
 type Context struct {
 	Body []byte
 	Req  *Request
+}
+
+func (c *Context) GetRule(ruleName string) *Rule {
+	return c.Req.Task.Rule.Trunk[ruleName]
+}
+
+func (c *Context) Output(data interface{}) *collector.OutputData {
+	res := &collector.OutputData{}
+	res.Data = make(map[string]interface{})
+	res.Data["Rule"] = c.Req.RuleName
+	res.Data["Data"] = data
+	res.Data["Url"] = c.Req.Url
+	res.Data["Time"] = time.Now().Format("2006-01-02 15:04:05")
+	return res
 }
 
 func (c *Context) ParseJSReg(name string, reg string) ParseResult {
@@ -77,7 +93,8 @@ type Request struct {
 	Depth    int64
 	RuleName string
 
-	unique string
+	unique  string
+	TmpData *Temp
 }
 
 // 请求的唯一识别码

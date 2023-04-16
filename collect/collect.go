@@ -2,7 +2,6 @@ package collect
 
 import (
 	"bufio"
-	"fmt"
 	extensions "github.com/funbinary/crawler/extentions"
 	"github.com/funbinary/crawler/proxy"
 	"github.com/pkg/errors"
@@ -57,7 +56,7 @@ func (b *BrowserFetch) Get(request *Request) ([]byte, error) {
 		transport.Proxy = b.Proxy
 		client.Transport = transport
 	}
-	fmt.Println("Get", request.Url)
+
 	req, err := http.NewRequest("GET", request.Url, nil)
 	if err != nil {
 		return nil, err
@@ -73,7 +72,7 @@ func (b *BrowserFetch) Get(request *Request) ([]byte, error) {
 		return nil, err
 	}
 	time.Sleep(request.Task.WaitTime)
-	fmt.Println("Get", request.Url, "success")
+
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		return nil, errors.Errorf("Error status code:%v", resp.StatusCode)

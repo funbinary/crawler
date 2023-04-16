@@ -2,7 +2,9 @@ package engine
 
 import (
 	"github.com/funbinary/crawler/collect"
+	"github.com/funbinary/crawler/parse/doubanbook"
 	"github.com/funbinary/crawler/parse/doubangroup"
+	"github.com/funbinary/crawler/parse/doubangroupjs"
 	"github.com/robertkrimen/otto"
 	"go.uber.org/zap"
 
@@ -11,7 +13,8 @@ import (
 
 func init() {
 	Store.Add(doubangroup.DoubangroupTask)
-	Store.AddJSTask(doubangroup.DoubangroupJsTask)
+	Store.AddJSTask(doubangroupjs.DoubangroupJsTask)
+	Store.Add(doubanbook.DoubanBookTask)
 }
 
 var Store = &CrawlerStore{
@@ -111,7 +114,7 @@ func (c *CrawlerStore) AddJSTask(m *collect.TaskModle) {
 			task.Rule.Trunk = make(map[string]*collect.Rule, 0)
 		}
 		task.Rule.Trunk[r.Name] = &collect.Rule{
-			paesrFunc,
+			ParseFunc: paesrFunc,
 		}
 	}
 
@@ -134,6 +137,7 @@ func NewEngine(opts ...Option) *Crawler {
 		opt(&options)
 	}
 	e := &Crawler{}
+	e.out = make(chan collect.ParseResult)
 	e.Visited = make(map[string]bool, 100)
 	e.failures = make(map[string]*collect.Request)
 	e.options = options
@@ -239,6 +243,7 @@ func (e *Crawler) CreateWork() {
 
 func (e *Crawler) HandleResult() {
 	for {
+
 		select {
 		// 接收所有 worker 解析后的数据
 		case result := <-e.out:
