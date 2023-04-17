@@ -4,6 +4,7 @@ go 1.19
 
 require (
 	github.com/funbinary/go_example v0.0.0-20230412133621-a9ceec4b2528
+	github.com/go-sql-driver/mysql v1.7.0
 	github.com/pkg/errors v0.9.1
 	github.com/robertkrimen/otto v0.2.1
 	github.com/stretchr/testify v1.8.2

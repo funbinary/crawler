@@ -63,7 +63,7 @@ func ParseTag(ctx *collect.Context) (collect.ParseResult, error) {
 			})
 	}
 	// 在添加limit之前，临时减少抓取数量,防止被服务器封禁
-	result.Requesrts = result.Requesrts[:1]
+	//result.Requesrts = result.Requesrts[:1]
 	return result, nil
 }
 

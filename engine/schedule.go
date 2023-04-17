@@ -2,6 +2,7 @@ package engine
 
 import (
 	"github.com/funbinary/crawler/collect"
+	"github.com/funbinary/crawler/collector"
 	"github.com/funbinary/crawler/parse/doubanbook"
 	"github.com/funbinary/crawler/parse/doubangroup"
 	"github.com/funbinary/crawler/parse/doubangroupjs"
@@ -19,16 +20,20 @@ func init() {
 
 var Store = &CrawlerStore{
 	list: []*collect.Task{},
-	hash: map[string]*collect.Task{},
+	Hash: map[string]*collect.Task{},
+}
+
+func GetFields(taskName string, ruleName string) []string {
+	return Store.Hash[taskName].Rule.Trunk[ruleName].ItemFields
 }
 
 type CrawlerStore struct {
 	list []*collect.Task
-	hash map[string]*collect.Task
+	Hash map[string]*collect.Task
 }
 
 func (c *CrawlerStore) Add(task *collect.Task) {
-	c.hash[task.Name] = task
+	c.Hash[task.Name] = task
 	c.list = append(c.list, task)
 }
 
@@ -118,7 +123,7 @@ func (c *CrawlerStore) AddJSTask(m *collect.TaskModle) {
 		}
 	}
 
-	c.hash[task.Name] = task
+	c.Hash[task.Name] = task
 	c.list = append(c.list, task)
 }
 
@@ -159,8 +164,10 @@ func (e *Crawler) Schedule() {
 	// workerCh
 	var reqs []*collect.Request
 	for _, seed := range e.Seeds {
-		task := Store.hash[seed.Name]
+		task := Store.Hash[seed.Name]
 		task.Fetcher = seed.Fetcher
+		task.Storage = seed.Storage
+		task.Logger = e.Logger
 		rootreqs, err := task.Rule.Root()
 		if err != nil {
 			e.Logger.Error("get root failed",
@@ -249,6 +256,12 @@ func (e *Crawler) HandleResult() {
 		case result := <-e.out:
 			//包含了我们实际希望得到的结果，所以我们先用日志把结果打印出来
 			for _, item := range result.Items {
+				switch d := item.(type) {
+				case *collector.DataCell:
+					name := d.GetTaskName()
+					task := Store.Hash[name]
+					task.Storage.Save(d)
+				}
 				// todo: store
 				e.Logger.Sugar().Info("get result", item)
 			}
