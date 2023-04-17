@@ -2,28 +2,28 @@ package sqlstorage
 
 import (
 	"encoding/json"
-	"github.com/funbinary/crawler/collector"
 	"github.com/funbinary/crawler/engine"
 	"github.com/funbinary/crawler/mysqldb"
+	"github.com/funbinary/crawler/storage"
 	"go.uber.org/zap"
 )
 
 // 实现 Storage 接口的实现
 
-type MySQLStore struct {
-	dataDocker  []*collector.DataCell //分批输出结果缓存
-	columnNames []mysqldb.Field       // 标题字段
+type MySQLStorage struct {
+	dataDocker  []*storage.DataCell //分批输出结果缓存
+	columnNames []mysqldb.Field     // 标题字段
 	db          mysqldb.DBer
 	Table       map[string]struct{}
 	options     // 选项
 }
 
-func New(opts ...Option) (*MySQLStore, error) {
+func New(opts ...Option) (*MySQLStorage, error) {
 	options := defaultOptions
 	for _, opt := range opts {
 		opt(&options)
 	}
-	s := &MySQLStore{}
+	s := &MySQLStorage{}
 	s.options = options
 	s.Table = make(map[string]struct{})
 	var err error
@@ -38,7 +38,7 @@ func New(opts ...Option) (*MySQLStore, error) {
 	return s, nil
 }
 
-func (s *MySQLStore) Save(dataCells ...*collector.DataCell) error {
+func (s *MySQLStorage) Save(dataCells ...*storage.DataCell) error {
 	// 循环遍历要存储的 DataCell，并判断当前 DataCell 对应的数据库表是否已经被创建。
 	for _, cell := range dataCells {
 		name := cell.GetTableName()
@@ -57,7 +57,9 @@ func (s *MySQLStore) Save(dataCells ...*collector.DataCell) error {
 		}
 		// 如果当前的数据小于 s.BatchCount，则将数据放入到缓存中直接返回（使用缓冲区批量插入数据库可以提高程序的性能）。
 		if len(s.dataDocker) >= s.BatchCount {
-			s.Flush()
+			if err := s.Flush(); err != nil {
+				s.logger.Error("insert data failed", zap.Error(err))
+			}
 		}
 		// 如果缓冲区已经满了，则调用 SqlStore.Flush() 方法批量插入数据。
 		s.dataDocker = append(s.dataDocker, cell)
@@ -68,7 +70,7 @@ func (s *MySQLStore) Save(dataCells ...*collector.DataCell) error {
 // getFields 用于获取当前数据的表字段与字段类型，这是从采集规则节点的 ItemFields 数组中获得的。
 // 为什么不直接用 DataCell 中 Data 对应的哈希表中的 Key 生成字段名呢？
 // 这一方面是因为它的速度太慢，另外一方面是因为 Go 中的哈希表在遍历时的顺序是随机的，而生成的字段列表需要顺序固定。
-func getFields(cell *collector.DataCell) []mysqldb.Field {
+func getFields(cell *storage.DataCell) []mysqldb.Field {
 	taskName := cell.Data["Task"].(string)
 	ruleName := cell.Data["Rule"].(string)
 	fields := engine.GetFields(taskName, ruleName)
@@ -89,10 +91,13 @@ func getFields(cell *collector.DataCell) []mysqldb.Field {
 
 // Flush 核心是遍历缓冲区，解析每一个 DataCell 中的数据，将扩展后的字段值批量放入 args 参数中，
 // 并调用底层 DBer.Insert 方法批量插入数据
-func (s *MySQLStore) Flush() error {
+func (s *MySQLStorage) Flush() (err error) {
 	if len(s.dataDocker) == 0 {
 		return nil
 	}
+	defer func() {
+		s.dataDocker = nil
+	}()
 	args := make([]interface{}, 0)
 	for _, datacell := range s.dataDocker {
 		ruleName := datacell.Data["Rule"].(string)

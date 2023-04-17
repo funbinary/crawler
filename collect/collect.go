@@ -71,7 +71,6 @@ func (b *BrowserFetch) Get(request *Request) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	time.Sleep(request.Task.WaitTime)
 
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {

@@ -2,10 +2,10 @@ package engine
 
 import (
 	"github.com/funbinary/crawler/collect"
-	"github.com/funbinary/crawler/collector"
 	"github.com/funbinary/crawler/parse/doubanbook"
 	"github.com/funbinary/crawler/parse/doubangroup"
 	"github.com/funbinary/crawler/parse/doubangroupjs"
+	"github.com/funbinary/crawler/storage"
 	"github.com/robertkrimen/otto"
 	"go.uber.org/zap"
 
@@ -257,7 +257,7 @@ func (e *Crawler) HandleResult() {
 			//包含了我们实际希望得到的结果，所以我们先用日志把结果打印出来
 			for _, item := range result.Items {
 				switch d := item.(type) {
-				case *collector.DataCell:
+				case *storage.DataCell:
 					name := d.GetTaskName()
 					task := Store.Hash[name]
 					task.Storage.Save(d)

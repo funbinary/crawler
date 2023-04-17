@@ -1,11 +1,14 @@
 package collect
 
 import (
+	"context"
 	"crypto/md5"
 	"encoding/hex"
-	"github.com/funbinary/crawler/collector"
+	"github.com/funbinary/crawler/limiter"
+	"github.com/funbinary/crawler/storage"
 	"github.com/funbinary/go_example/pkg/errors"
 	"go.uber.org/zap"
+	"math/rand"
 	"regexp"
 	"sync"
 	"time"
@@ -17,8 +20,8 @@ type Property struct {
 	Name     string // 用户界面显示的名称（应保证唯一性）
 	Url      string // 访问的防战
 	Cookie   string
-	WaitTime time.Duration
-	Reload   bool // 网站是否可以重复爬取
+	WaitTime int64 // 随机休眠,秒
+	Reload   bool  // 网站是否可以重复爬取
 	MaxDepth int64
 }
 
@@ -29,8 +32,9 @@ type Task struct {
 	VisitedLock sync.Mutex
 	Rule        RuleTree
 	Fetcher     Fetcher
-	Storage     collector.Storage
+	Storage     storage.Storage
 	Logger      *zap.Logger
+	Limit       limiter.RateLimiter
 }
 
 type Context struct {
@@ -42,8 +46,8 @@ func (c *Context) GetRule(ruleName string) *Rule {
 	return c.Req.Task.Rule.Trunk[ruleName]
 }
 
-func (c *Context) Output(data interface{}) *collector.DataCell {
-	res := &collector.DataCell{}
+func (c *Context) Output(data interface{}) *storage.DataCell {
+	res := &storage.DataCell{}
 	res.Data = make(map[string]interface{})
 	res.Data["Task"] = c.Req.Task.Name
 	res.Data["Rule"] = c.Req.RuleName
@@ -98,6 +102,16 @@ type Request struct {
 
 	unique  string
 	TmpData *Temp
+}
+
+func (r *Request) Fetch() ([]byte, error) {
+	if err := r.Task.Limit.Wait(context.Background()); err != nil {
+		return nil, err
+	}
+	// 随机休眠，模拟人类行为
+	sleeptime := rand.Int63n(r.Task.WaitTime * 1000)
+	time.Sleep(time.Duration(sleeptime) * time.Millisecond)
+	return r.Task.Fetcher.Get(r)
 }
 
 // 请求的唯一识别码
